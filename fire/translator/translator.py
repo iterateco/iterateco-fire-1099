@@ -10,8 +10,8 @@ Support notes:
 import os.path
 import json
 from time import gmtime, strftime
-from jsonschema import validate
 import click
+from jsonschema import validate
 
 from fire.entities import transmitter, payer, payees, end_of_payer, \
                           end_of_transmission
@@ -21,16 +21,18 @@ from .util import SequenceGenerator
 @click.argument('input_path', type=click.Path(exists=True))
 @click.option('--output', type=click.Path(),
               help='system path for the output to be generated')
-def cli(input_path, output):
+@click.option('--debug', is_flag=True,
+              help='toggle debug/verbose mode')
+def cli(input_path, output, debug):
     """
     Convert a JSON input file into the format required by IRS Publication 1220
 
     \b
     input_path: system path for file containing the user input JSON data
     """
-    run(input_path, output)
+    run(input_path, output, debug)
 
-def run(input_path, output_path):
+def run(input_path, output_path, debug):
     """
     Sequentially calls helper functions to fully process :
     * Load user JSON data from input file
@@ -45,24 +47,30 @@ def run(input_path, output_path):
         system path for file containing the user input JSON data
     output : str
         optional system path for the output to be generated
+    debug : bool
+        optional bool to output debug information
 
     """
     module_path = os.path.split(os.path.realpath(__file__))[0]
     schema_path = os.path.join(module_path, '../schema', 'base_schema.json')
     input_dirname = os.path.dirname(os.path.abspath(input_path))
-    if output_path is None:
-        output_path = "{}/output_{}".format(input_dirname,
-                                            strftime("%Y-%m-%d %H_%M_%S",
-                                                     gmtime()))
 
     user_data = extract_user_data(input_path)
     validate_user_data(user_data, schema_path)
 
     master = load_full_schema(user_data)
     insert_generated_values(master)
+    if debug:
+        print(json.dumps(master, indent=4))
 
     ascii_string = get_fire_format(master)
+
+    if output_path is None:
+        output_path = "{}/fire_{}_output_{}".format(input_dirname,
+                                                    master["transmitter"]["payment_year"],
+                                                    strftime("%Y-%m-%d %H_%M_%S", gmtime()))
     write_1099_file(ascii_string, output_path)
+
 
 def extract_user_data(path):
     """
@@ -118,12 +126,14 @@ def load_full_schema(data):
         Master schema with all fields provided in input parameter included
 
     """
-    merged_data = {"transmitter": "", "payer": "", "payees": [],
-                   "end_of_payer": "", "end_of_transmission": ""}
+    merged_data = {"transmitter": "", "payers": [], "end_of_transmission": ""}
+
     merged_data["transmitter"] = transmitter.xform(data["transmitter"])
-    merged_data["payer"] = payer.xform(data["payer"])
-    merged_data["payees"] = payees.xform(data["payees"])
-    merged_data["end_of_payer"] = end_of_payer.xform({})
+    for current_payer in data["payers"]:
+        payer_merged_data = payer.xform(current_payer)
+        payer_merged_data["payees"] = payees.xform(current_payer["payees"])
+        payer_merged_data["end_of_payer"] = end_of_payer.xform({})
+        merged_data["payers"].append(payer_merged_data)
     merged_data["end_of_transmission"] = end_of_transmission.xform({})
 
     return merged_data
@@ -145,7 +155,7 @@ def insert_generated_values(data):
 
     """
     insert_sequence_numbers(data)
-    insert_payer_totals(data)
+    insert_payers_totals(data)
     insert_transmitter_totals(data)
 
 def insert_sequence_numbers(data):
@@ -164,17 +174,17 @@ def insert_sequence_numbers(data):
     """
     seq = SequenceGenerator()
 
-    # Warning: order of below statements is important; do not re-arrange
     data["transmitter"]["record_sequence_number"] = seq.get_next()
-    data["payer"]["record_sequence_number"] = seq.get_next()
-    for payee in data["payees"]:
-        payee["record_sequence_number"] = seq.get_next()
-    data["end_of_payer"]["record_sequence_number"] = seq.get_next()
+    for current_payer in data["payers"]:
+        current_payer["record_sequence_number"] = seq.get_next()
+        for payee in current_payer["payees"]:
+            payee["record_sequence_number"] = seq.get_next()
+        current_payer["end_of_payer"]["record_sequence_number"] = seq.get_next()
     data["end_of_transmission"]["record_sequence_number"] = seq.get_next()
 
-def insert_payer_totals(data):
+def insert_payers_totals(data):
     """
-    Inserts requried values into the payer and end_of_payer records. This
+    Inserts requried values into the payer(s) and end_of_payer records. This
     includes values for the following fields: payment_amount_*,
     amount_codes, number_of_payees, total_number_of_payees, number_of_a_records.
 
@@ -187,12 +197,20 @@ def insert_payer_totals(data):
         computed values will be inserted.
 
     """
-    codes = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D",
-             "E", "F", "G"]
+    for current_payer in data["payers"]:
+        insert_payer_totals(current_payer)
+
+def insert_payer_totals(current_payer):
+    """
+    Inserts required values into a single payer record.
+    _Note: this edits the input parameter in-place._
+    """
+    codes = ["1", "2", "3", "4", "5", "6", "7", "8", "9",
+             "A", "B", "C", "D", "E", "F", "G"]
     totals = [0 for _ in range(len(codes))]
     payer_code_string = ""
 
-    for payee in data["payees"]:
+    for payee in current_payer["payees"]:
         for i, code in enumerate(codes):
             try:
                 totals[i] += int(payee["payment_amount_" + code])
@@ -202,12 +220,11 @@ def insert_payer_totals(data):
     for i, (total, code) in enumerate(zip(totals, codes)):
         if total != 0:
             payer_code_string += code
-            data["end_of_payer"]["payment_amount_" + code] = f"{total:0>18}"
+            current_payer["end_of_payer"]["payment_amount_" + code] = f"{total:0>18}"
 
-    data["payer"]["amount_codes"] = str(payer_code_string)
-    payee_count = len(data["payees"])
-    data["payer"]["number_of_payees"] = f"{payee_count:0>8}"
-    data["end_of_payer"]["number_of_payees"] = f"{payee_count:0>8}"
+    current_payer["amount_codes"] = str(payer_code_string)
+    payee_count = len(current_payer["payees"])
+    current_payer["end_of_payer"]["number_of_payees"] = f"{payee_count:0>8}"
 
 def insert_transmitter_totals(data):
     """
@@ -224,21 +241,24 @@ def insert_transmitter_totals(data):
         into which computed values will be inserted.
 
     """
-    payee_count = len(data["payees"])
+    payee_count = 0
+    for current_payer in data["payers"]:
+        payee_count += len(current_payer["payees"])
+    payer_count = len(data["payers"])
+
     data["transmitter"]["total_number_of_payees"] = f"{payee_count:0>8}"
     data["end_of_transmission"]["total_number_of_payees"] = f"{payee_count:0>8}"
-    # Force number of A records to "1" as only one payer is supported
-    data["end_of_transmission"]["number_of_a_records"] = "00000001"
+    data["end_of_transmission"]["number_of_a_records"] = f"{payer_count:0>8}"
 
 def get_fire_format(data):
     """
     Returns the input dictionary converted into the string format required by
-    the IRS FIRE electronic filing system. It is expceted that the input
+    the IRS FIRE electronic filing system. It is expected that the input
     dictionary has the following correctly formatted items:
     * transmitter (dict)
-    * payer (dict)
-    * payees (array of dict objects)
-    * end_of_payer (dict)
+    * payer(s) (dict)
+    *   payees (array of dict objects)
+    *   end_of_payer (dict)
     * end_of_transmission
 
     Parameters
@@ -256,9 +276,10 @@ def get_fire_format(data):
     fire_string = ""
 
     fire_string += transmitter.fire(data["transmitter"])
-    fire_string += payer.fire(data["payer"])
-    fire_string += payees.fire(data["payees"])
-    fire_string += end_of_payer.fire(data["end_of_payer"])
+    for current_payer in data["payers"]:
+        fire_string += payer.fire(current_payer)
+        fire_string += payees.fire(current_payer["payees"])
+        fire_string += end_of_payer.fire(current_payer["end_of_payer"])
     fire_string += end_of_transmission.fire(data["end_of_transmission"])
 
     return fire_string
