@@ -5,16 +5,16 @@ Module packaging
 from setuptools import setup, find_packages
 
 setup(
-    name='fire-1099',
+    name='iterateco-fire-1099',
     description='Generate 1099-MISC files for transmission through the \
     IRS FIRE system',
     long_description=open('README.md').read(),
 
     license='MIT',
 
-    author='Stephen Johnson',
-    author_email='4stephen.j@gmail.com',
-    url='https://github.com/djeserkare/fire-1099',
+    author='Hiep Dam',
+    author_email='hiep@iterate.co',
+    url='https://github.com/iterateco/iterateco-fire-1099',
 
     version='0.0.1-alpha',
 

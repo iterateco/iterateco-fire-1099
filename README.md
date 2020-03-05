@@ -1,9 +1,9 @@
 # What this is
-Fire-1099 helps you stop wasting ~$10 per page on 1099 filings. 
+Fire-1099 helps you stop wasting ~$10 per page on 1099 filings.
 
-Specifically, it generates 1099 tax filings formatted for the IRS electronic filing system.
+Specifically, it generates 1099 tax filings formatted for the IRS electronic filing system. This repo builds upon the excellent original [fire-1099](https://github.com/sdj0/fire-1099) work by Stephen Johnson by adding support for multiple payers.
 
-A lot of small companies don't realize they have to file 1099s for most payments to lawyers, as well as independent contractors. The IRS has a system called "FIRE" for electronically submitting these filings, and others like stock options exercise forms. These filings can *only* be filed through this system. If you're used to modern REST APIs, you'll probably find FIRE unpleasant to use. It's inflexible, has an ambiguous spec, and operates on the byte (ASCII code) level. 
+A lot of small companies don't realize they have to file 1099s for most payments to lawyers, as well as independent contractors. The IRS has a system called "FIRE" for electronically submitting these filings, and others like stock options exercise forms. These filings can *only* be filed through this system. If you're used to modern REST APIs, you'll probably find FIRE unpleasant to use. It's inflexible, has an ambiguous spec, and operates on the byte (ASCII code) level.
 
 With fire-1099, you simply enter your form data in a JSON file [like this one](https://github.com/djeserkare/fire-1099/blob/master/spec/data/valid_minimal.json) and run it through the program. It validates your data against the IRS spec, auto-formats it where possible, and writes it to a file that can be uploaded straight to FIRE.
 
@@ -65,14 +65,15 @@ A few things need to happen before you can submit an output file to the IRS:
 * You need a *Transmitter Control Code* or "TCC." This is done by filing From 4419 electronically (https://fire.irs.gov). It can take 45 days to get a response.
 * You need to have a valid business tax identification code (EIN/TIN). This will be linked to your TCC, and is what you'll use for the "transmitter" record in your FIRE submissions.
 
+# TODO:
+- Fix `/spec/data/*json` files as they are out-of-date
+- Fix tests to work with new multiple payer support
+
 # Future Work
 * Add support for "Extension of Time" requests
 * Add support for filings other than 1099-MISC
 * Improve schema regex validations
 * Add validation logic for more obscure fields, and for cross-field dependencies like "combined state-federal"
 * Add support for multiple sequential files, i.e. scope sequence numbers to multiple files
-
-
-Note: support multiple payers in a single file is not planned, as this is meant as a "DIY" tool for businesses to use themselves.
 
 
