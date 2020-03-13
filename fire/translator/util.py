@@ -129,14 +129,41 @@ def fire_entity(entity_dict, key_ordering, data, expected_length=750):
                     {len(record_string)}")
     return record_string
 
+def combined_fed_state_code(state_abbrev):
+    """
+    Returns the IRS FIRE Combined Federal/State Filing (CF/SF) code for the given state.
+
+    Parameters
+    ----------
+    state_abbrev: string
+        State abbreviation, as specified in IRS Pub 1220 (e.g. California = CA)
+
+    Returns
+    ----------
+    Returns the IRS state code; None if the specified state is not
+    participating in the CF/SF program
+    """
+    state_codes = dict(
+        AL=1, AZ=4, AR=5, CA=6, CO=7, CT=8,
+        DE=10, GA=13, HI=15, ID=16, IN=18, KS=20, LA=22,
+        ME=23, MD=24, MA=25, MI=26, MN=27, MS=28, MO=29, MT=30,
+        NE=31, NJ=34, NM=35, NC=37, ND=38,
+        OH=39, OK=40, SC=45, WI=55
+    )
+
+    if state_abbrev in state_codes:
+        return state_codes[state_abbrev]
+    else:
+        return None
+
 """
 Transformations on user-supplied data
 -------------------------------------
 Many attributes in each record / entity type share similar
-formatting requirements according to IRS Pub 1220. For example, most text 
-fields are required to contain uppercase characters. 
+formatting requirements according to IRS Pub 1220. For example, most text
+fields are required to contain uppercase characters.
 
-The functions below facilitate transformations that are similar across 
+The functions below facilitate transformations that are similar across
 different fields and entities.
 """
 
