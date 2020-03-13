@@ -66,7 +66,8 @@
                     "payer_telephone_number_and_ext": {"$ref": "#/definitions/phone"},
                     "record_sequence_number": {"type": "string", "maxLength": 8},
                     "payees": {"$ref": "#/definitions/payees"},
-                    "end_of_payer": {"$ref": "#/definitions/end_of_payer"}
+                    "end_of_payer": {"$ref": "#/definitions/end_of_payer"},
+                    "state_totals": {"$ref:": "#/definitions/state_totals"}
                 },
                 "required":[
                     "first_payer_name", "payment_year", "payer_shipping_address", "payer_city",
@@ -159,6 +160,34 @@
                 "payment_amount_F": {"$ref": "#/definitions/dollar_amount"},
                 "payment_amount_G": {"$ref": "#/definitions/dollar_amount"},
                 "record_sequence_number": {"type": "string", "maxLength": 8}
+            }
+        },
+        "state_totals":{
+            "type":"array",
+            "items":{
+                "type": "object",
+                "properties": {
+                    "record_type": {"type": "string", "maxLength": 1},
+                    "number_of_payees": {"type": "string", "maxLength": 8},
+                    "payment_amount_1": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_2": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_3": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_4": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_5": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_6": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_7": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_8": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_9": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_A": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_B": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_C": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_D": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_E": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_F": {"$ref": "#/definitions/dollar_amount"},
+                    "payment_amount_G": {"$ref": "#/definitions/dollar_amount"},
+                    "record_sequence_number": {"type": "string", "maxLength": 8},
+                    "combined_federal_state_code": {"type": "string", "maxLength": 2}
+                }
             }
         },
         "tin":{

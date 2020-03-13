@@ -14,8 +14,8 @@ import click
 from jsonschema import validate
 
 from fire.entities import transmitter, payer, payees, end_of_payer, \
-                          end_of_transmission
-from .util import SequenceGenerator
+                          state_totals, end_of_transmission
+from .util import SequenceGenerator, combined_fed_state_code
 
 @click.command()
 @click.argument('input_path', type=click.Path(exists=True))
@@ -154,15 +154,16 @@ def insert_generated_values(data):
         fields captured.
 
     """
-    insert_sequence_numbers(data)
     insert_payers_totals(data)
     insert_transmitter_totals(data)
+    create_and_insert_state_totals(data)
+    insert_sequence_numbers(data)
 
 def insert_sequence_numbers(data):
     """
     Inserts sequence numbers into each record, in the following order:
     transmitter, payer, payee(s) (each in order supplied by user),
-    end of payer, end of transmission.
+    end of payer, state totals, end of transmission.
 
     _Note: this edits the input parameter in-place._
 
@@ -180,6 +181,9 @@ def insert_sequence_numbers(data):
         for payee in current_payer["payees"]:
             payee["record_sequence_number"] = seq.get_next()
         current_payer["end_of_payer"]["record_sequence_number"] = seq.get_next()
+        if "state_totals" in current_payer:
+            for state_total in current_payer["state_totals"]:
+                state_total["record_sequence_number"] = seq.get_next()
     data["end_of_transmission"]["record_sequence_number"] = seq.get_next()
 
 def insert_payers_totals(data):
@@ -250,6 +254,99 @@ def insert_transmitter_totals(data):
     data["end_of_transmission"]["total_number_of_payees"] = f"{payee_count:0>8}"
     data["end_of_transmission"]["number_of_a_records"] = f"{payer_count:0>8}"
 
+def create_and_insert_state_totals(data):
+    """
+    Creates and inserts required values into the payer(s)' state totals records.
+    This creates all the necessary K records, with the only requirement that
+    the payer's "combined_fed_state" field be set to "1".
+    If it is not set, then state totals are skipped.
+
+    _Note: this edits the input parameter in-place._
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary containing payer records, into which
+        computed values will be inserted.
+
+    """
+    for current_payer in data["payers"]:
+        insert_state_totals(current_payer)
+        insert_payee_state_codes(current_payer)
+
+def insert_state_totals(current_payer):
+    """
+    Inserts required values into a single payer record.
+    If payer "combined_fed_state" is not set to "1", this is skipped
+    and no modifications/additions are made.
+
+    The following fields are calculated/inserted:
+        - number_of_payees
+        - combined_federal_state_code
+
+    _Note: this edits the input parameter in-place._
+    """
+    codes = ["1", "2", "3", "4", "5", "6", "7", "8", "9",
+             "A", "B", "C", "D", "E", "F", "G"]
+    states = {}
+
+    if current_payer["combined_fed_state"] != '1':
+        return
+
+    for payee in current_payer["payees"]:
+        state = payee["payee_state"]
+        state_code = combined_fed_state_code(state)
+        if not state_code:
+            # Payee's state not participating in CF/SF program; skip this payee
+            continue
+
+        if state not in states:
+            states[state] = dict(number_of_payees=0, combined_federal_state_code=state_code)
+        states[state]['number_of_payees'] += 1
+        for i, code in enumerate(codes):
+            try:
+                payment_bucket = f"payment_amount_{code}"
+                amount = int(payee[payment_bucket])
+                if payment_bucket not in states[state]:
+                    states[state][payment_bucket] = 0
+                states[state][payment_bucket] += amount
+            except ValueError:
+                pass
+
+    if states:
+        # Convert calculated values to strings for output
+        for key in states:
+            state = states[key]
+            state['number_of_payees'] = f"{state['number_of_payees']:0>8}"
+            state['combined_federal_state_code'] = f"{state['combined_federal_state_code']:0>2}"
+            for code in codes:
+                payment_bucket = f"payment_amount_{code}"
+                if payment_bucket in state:
+                    state[payment_bucket] = f"{state[payment_bucket]:0>18}"
+
+        # We couldn't do the below earlier (unlike the other record types)
+        # since the number of K records has to be determined first before
+        # we can xform.
+        current_payer["state_totals"] = state_totals.xform(states.values())
+
+def insert_payee_state_codes(current_payer):
+    """
+    Inserts the IRS FIRE state code for the payer's payees,
+    but only if:
+        1. The payer's "combined_fed_state" field is set to "1", and
+        2. The payee's state is participating in the CF/SF program.
+
+    _Note: this edits the input parameter in-place._
+    """
+    if current_payer["combined_fed_state"] != '1':
+        return
+
+    for payee in current_payer["payees"]:
+        state = payee["payee_state"]
+        state_code = combined_fed_state_code(state)
+        if state_code:
+            payee["combined_federal_state_code"] = f"{state_code:0>2}"
+
 def get_fire_format(data):
     """
     Returns the input dictionary converted into the string format required by
@@ -280,6 +377,8 @@ def get_fire_format(data):
         fire_string += payer.fire(current_payer)
         fire_string += payees.fire(current_payer["payees"])
         fire_string += end_of_payer.fire(current_payer["end_of_payer"])
+        if current_payer["combined_fed_state"] == '1':
+            fire_string += state_totals.fire(current_payer["state_totals"])
     fire_string += end_of_transmission.fire(data["end_of_transmission"])
 
     return fire_string
