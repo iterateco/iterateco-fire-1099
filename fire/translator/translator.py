@@ -50,6 +50,12 @@ def run(input_path, output_path, debug):
     debug : bool
         optional bool to output debug information
 
+    Returns
+    ----------
+    dict
+        'json_data': the json-generated data (this is the data that
+                     gets printed out if you specify debug=True)
+        'fire_data': this is the data that gets written out in output_path
     """
     module_path = os.path.split(os.path.realpath(__file__))[0]
     schema_path = os.path.join(module_path, '../schema', 'base_schema.json')
@@ -70,6 +76,8 @@ def run(input_path, output_path, debug):
                                                     master["transmitter"]["payment_year"],
                                                     strftime("%Y-%m-%d %H_%M_%S", gmtime()))
     write_1099_file(ascii_string, output_path)
+
+    return dict(json_data=json.dumps(master, indent=4), fire_data=ascii_string)
 
 
 def extract_user_data(path):
